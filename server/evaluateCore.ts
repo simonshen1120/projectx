@@ -45,33 +45,27 @@ const systemPrompt = `你是一位资深的 HR 面试教练，专门帮助应届
   "top3_suggestions": ["string", "string", "string"]
 }`
 
-export function getDeepseekKeyError() {
-  const raw = (process.env.DEEPSEEK_API_KEY ?? '')
-    .trim()
-    .replace(/^['"]|['"]$/g, '')
-  if (!raw) return 'DEEPSEEK_API_KEY is missing in server environment'
-  if (!/^[\x20-\x7E]+$/.test(raw)) {
+export function validateApiKey(raw: string | undefined): string | null {
+  const key = (raw ?? '').trim().replace(/^['"]|['"]$/g, '')
+  if (!key) return 'DEEPSEEK_API_KEY is missing in server environment'
+  if (!/^[\x20-\x7E]+$/.test(key)) {
     return 'DEEPSEEK_API_KEY contains non-ASCII characters. Please re-paste the raw key only.'
   }
-  if (!raw.startsWith('sk-')) {
+  if (!key.startsWith('sk-')) {
     return 'DEEPSEEK_API_KEY format looks invalid (should start with sk-).'
   }
   return null
 }
 
-function getClient() {
-  const keyError = getDeepseekKeyError()
-  if (keyError) return { keyError, client: null as OpenAI | null }
-  const apiKey = (process.env.DEEPSEEK_API_KEY ?? '')
-    .trim()
-    .replace(/^['"]|['"]$/g, '')
-  return {
-    keyError: null,
-    client: new OpenAI({
-      apiKey,
-      baseURL: 'https://api.deepseek.com/v1',
-    }),
-  }
+function cleanKey(raw: string | undefined) {
+  return (raw ?? '').trim().replace(/^['"]|['"]$/g, '')
+}
+
+function makeClient(apiKey: string) {
+  return new OpenAI({
+    apiKey,
+    baseURL: 'https://api.deepseek.com/v1',
+  })
 }
 
 function tryParseJson(content: string): EvaluateResponse | null {
@@ -93,11 +87,14 @@ function tryParseJson(content: string): EvaluateResponse | null {
 export async function evaluateIntroduction(
   transcript: string,
   durationSeconds: number,
+  rawApiKey?: string,
 ) {
-  const { keyError, client } = getClient()
-  if (!client || keyError) {
-    return { ok: false as const, error: keyError ?? 'DEEPSEEK_API_KEY is not available' }
+  const apiKey = cleanKey(rawApiKey ?? process.env.DEEPSEEK_API_KEY)
+  const keyError = validateApiKey(apiKey || undefined)
+  if (keyError) {
+    return { ok: false as const, error: keyError }
   }
+  const client = makeClient(apiKey)
 
   try {
     const completion = await client.chat.completions.create({
