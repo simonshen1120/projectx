@@ -1,5 +1,3 @@
-import OpenAI from 'openai'
-
 export type EvaluateResponse = {
   overall_score: number
   dimensions: {
@@ -11,6 +9,8 @@ export type EvaluateResponse = {
   }
   top3_suggestions: string[]
 }
+
+const DEEPSEEK_API_URL = 'https://api.deepseek.com/v1/chat/completions'
 
 const systemPrompt = `你是一位资深的 HR 面试教练，专门帮助应届大学生改进自我介绍。
 
@@ -61,13 +61,6 @@ function cleanKey(raw: string | undefined) {
   return (raw ?? '').trim().replace(/^['"]|['"]$/g, '')
 }
 
-function makeClient(apiKey: string) {
-  return new OpenAI({
-    apiKey,
-    baseURL: 'https://api.deepseek.com/v1',
-  })
-}
-
 function tryParseJson(content: string): EvaluateResponse | null {
   try {
     const parsed = JSON.parse(content) as EvaluateResponse
@@ -89,41 +82,56 @@ export async function evaluateIntroduction(
   durationSeconds: number,
   rawApiKey?: string,
 ) {
-  const apiKey = cleanKey(rawApiKey ?? process.env.DEEPSEEK_API_KEY)
+  const apiKey = cleanKey(rawApiKey ?? (typeof process !== 'undefined' ? process.env?.DEEPSEEK_API_KEY : undefined))
   const keyError = validateApiKey(apiKey || undefined)
   if (keyError) {
     return { ok: false as const, error: keyError }
   }
-  const client = makeClient(apiKey)
 
   try {
-    const completion = await client.chat.completions.create({
-      model: 'deepseek-chat',
-      response_format: { type: 'json_object' },
-      messages: [
-        { role: 'system', content: systemPrompt },
-        {
-          role: 'user',
-          content: JSON.stringify(
-            {
-              transcript,
-              duration_seconds: durationSeconds,
-            },
-            null,
-            2,
-          ),
-        },
-      ],
-      temperature: 0.3,
+    const response = await fetch(DEEPSEEK_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'deepseek-chat',
+        response_format: { type: 'json_object' },
+        messages: [
+          { role: 'system', content: systemPrompt },
+          {
+            role: 'user',
+            content: JSON.stringify({ transcript, duration_seconds: durationSeconds }, null, 2),
+          },
+        ],
+        temperature: 0.3,
+      }),
     })
 
-    const content = completion.choices[0]?.message?.content ?? ''
+    const rawBody = await response.text()
+
+    if (!response.ok) {
+      return {
+        ok: false as const,
+        error: `DeepSeek API ${response.status}: ${rawBody.slice(0, 200)}`,
+      }
+    }
+
+    let apiResult: { choices?: Array<{ message?: { content?: string } }> }
+    try {
+      apiResult = JSON.parse(rawBody)
+    } catch {
+      return { ok: false as const, error: `DeepSeek returned non-JSON: ${rawBody.slice(0, 200)}` }
+    }
+
+    const content = apiResult.choices?.[0]?.message?.content ?? ''
     const parsed = tryParseJson(content)
     if (!parsed) {
       return {
         ok: false as const,
         error: 'DeepSeek returned invalid JSON format',
-        raw: content,
+        raw: content.slice(0, 300),
       }
     }
 
@@ -131,8 +139,7 @@ export async function evaluateIntroduction(
   } catch (error) {
     return {
       ok: false as const,
-      error: 'Failed to call DeepSeek API',
-      details: String(error),
+      error: `Failed to call DeepSeek API: ${error instanceof Error ? error.message : String(error)}`,
     }
   }
 }
