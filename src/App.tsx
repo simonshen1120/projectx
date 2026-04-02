@@ -169,7 +169,7 @@ function App() {
 
   const transcriptForDisplay =
     evaluation?.transcript ||
-    speech.transcript ||
+    `${speech.transcript} ${speech.interimTranscript}`.trim() ||
     manualTranscript ||
     '未获取到转写内容，请重试并确认在 Chrome 中授权麦克风。'
 
@@ -182,11 +182,11 @@ function App() {
 
   useEffect(() => {
     if (state !== 'result') return
-    const recognizedTranscript = speech.transcript.trim()
+    const recognizedTranscript = `${speech.transcript} ${speech.interimTranscript}`.trim()
     if (!recognizedTranscript || autoEvaluateRequestedRef.current) return
     autoEvaluateRequestedRef.current = true
     void runEvaluation(recognizedTranscript)
-  }, [runEvaluation, state, speech.transcript])
+  }, [runEvaluation, state, speech.transcript, speech.interimTranscript])
 
   return (
     <main className="app-shell">
@@ -284,7 +284,7 @@ function App() {
               <p className="transcript-title">你的自我介绍原文</p>
               <p className="transcript-content">{transcriptForDisplay}</p>
             </section>
-            {!speech.transcript && (
+            {!`${speech.transcript} ${speech.interimTranscript}`.trim() && (
               <section className="transcript-box">
                 <p className="transcript-title">手动补充原文（网络异常时可用）</p>
                 <textarea

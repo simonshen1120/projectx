@@ -130,7 +130,6 @@ export function useSpeechRecognition() {
   }
 
   const stop = () => {
-    setInterimTranscript('')
     shouldListenRef.current = false
     retryPendingRef.current = false
     if (recognitionRef.current && isListening) {
