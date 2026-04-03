@@ -24,8 +24,16 @@ type TranscribePayload = {
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim()
 
+function shouldIgnoreConfiguredApiBase(url: string) {
+  if (typeof window === 'undefined') return false
+  // Guardrail: prevent production bundles from accidentally hardcoding localhost APIs.
+  if (!/localhost|127\.0\.0\.1/i.test(url)) return false
+  return !/localhost|127\.0\.0\.1/i.test(window.location.hostname)
+}
+
 function getApiUrl(path: string) {
   if (!API_BASE_URL) return path
+  if (shouldIgnoreConfiguredApiBase(API_BASE_URL)) return path
   return `${API_BASE_URL.replace(/\/$/, '')}${path}`
 }
 
