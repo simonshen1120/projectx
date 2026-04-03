@@ -16,6 +16,12 @@ type EvaluatePayload = {
   duration_seconds: number
 }
 
+type TranscribePayload = {
+  audio_base64: string
+  mime_type: string
+  language?: string
+}
+
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim()
 
 function getApiUrl(path: string) {
@@ -45,4 +51,54 @@ export async function evaluateSelfIntro(payload: EvaluatePayload) {
   }
 
   return data as EvaluationResult
+}
+
+function blobToBase64(blob: Blob) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const result = String(reader.result ?? '')
+      const base64 = result.includes(',') ? result.split(',')[1] : ''
+      resolve(base64)
+    }
+    reader.onerror = () => reject(new Error('录音编码失败，请重试。'))
+    reader.readAsDataURL(blob)
+  })
+}
+
+export async function transcribeAudio(blob: Blob, language = 'zh') {
+  const audioBase64 = await blobToBase64(blob)
+  if (!audioBase64) {
+    throw new Error('录音编码为空，请重新录制。')
+  }
+
+  const payload: TranscribePayload = {
+    audio_base64: audioBase64,
+    mime_type: blob.type || 'audio/webm',
+    language,
+  }
+
+  const response = await fetch(getApiUrl('/api/transcribe'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+
+  const raw = await response.text()
+  let data: { text?: string; error?: string } = {}
+  try {
+    data = JSON.parse(raw) as { text?: string; error?: string }
+  } catch {
+    data = { error: raw || '转写服务返回了非 JSON 内容。' }
+  }
+
+  if (!response.ok) {
+    throw new Error(data.error || '语音转写失败，请稍后重试。')
+  }
+
+  const text = String(data.text ?? '').trim()
+  if (!text) {
+    throw new Error('转写结果为空，请重新录制或手动输入。')
+  }
+  return text
 }

@@ -1,6 +1,6 @@
 # AI 面试教练 MVP
 
-极简单页应用：录音 -> 语音转写（浏览器）-> DeepSeek 评分建议。
+极简单页应用：录音 -> 语音转写（浏览器优先，后端 ASR 兜底）-> DeepSeek 评分建议。
 
 ## 本地运行
 
@@ -9,6 +9,10 @@
 ```env
 PORT=8787
 DEEPSEEK_API_KEY=sk-xxxxx
+# 可选但强烈建议：后端语音转写（OpenAI/Groq 兼容）
+# ASR_API_KEY=sk-xxxxx
+# ASR_BASE_URL=https://api.openai.com/v1
+# ASR_MODEL=whisper-1
 ```
 
 2. 安装并启动：
@@ -34,6 +38,7 @@ npm run dev
 2. 在 Vercel 点击 `Add New Project`，导入该仓库
 3. 在 Vercel 项目设置里配置环境变量：
    - `DEEPSEEK_API_KEY=sk-xxxxx`
+   - `ASR_API_KEY=sk-xxxxx`（建议，用于后端语音转写兜底）
 4. 直接 Deploy（无需额外服务器）
 5. 部署完成后，把 Vercel 给你的 URL 发给别人即可访问
 

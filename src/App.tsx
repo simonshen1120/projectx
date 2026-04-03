@@ -3,7 +3,7 @@ import './App.css'
 import { AudioWave } from './components/AudioWave'
 import { RecordButton } from './components/RecordButton'
 import { useSpeechRecognition } from './hooks/useSpeechRecognition'
-import { evaluateSelfIntro, type EvaluationResult } from './lib/api'
+import { evaluateSelfIntro, transcribeAudio, type EvaluationResult } from './lib/api'
 
 type AppState = 'idle' | 'recording' | 'result'
 const MAX_RECORDING_SECONDS = 180
@@ -37,8 +37,10 @@ function App() {
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const mediaStreamRef = useRef<MediaStream | null>(null)
+  const audioChunksRef = useRef<Blob[]>([])
   const timerRef = useRef<number | null>(null)
   const autoEvaluateRequestedRef = useRef(false)
+  const [recordedAudioBlob, setRecordedAudioBlob] = useState<Blob | null>(null)
   const speech = useSpeechRecognition()
 
   const isRecordingSupported = useMemo(() => {
@@ -95,7 +97,18 @@ function App() {
 
       mediaRecorderRef.current = mediaRecorder
       mediaStreamRef.current = stream
+      audioChunksRef.current = []
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data && event.data.size > 0) {
+          audioChunksRef.current.push(event.data)
+        }
+      }
       mediaRecorder.onstop = () => {
+        if (audioChunksRef.current.length > 0) {
+          const blob = new Blob(audioChunksRef.current, { type: mediaRecorder.mimeType || 'audio/webm' })
+          setRecordedAudioBlob(blob)
+        }
+        audioChunksRef.current = []
         stopStreamTracks()
         mediaRecorderRef.current = null
       }
@@ -107,6 +120,7 @@ function App() {
       setEvaluation(null)
       setEvaluateError('')
       autoEvaluateRequestedRef.current = false
+      setRecordedAudioBlob(null)
       speech.reset()
       speech.start()
       setState('recording')
@@ -140,6 +154,7 @@ function App() {
     setEvaluation(null)
     setEvaluateError('')
     setIsEvaluating(false)
+    setRecordedAudioBlob(null)
     autoEvaluateRequestedRef.current = false
     setErrorMessage('')
     setState('idle')
@@ -183,10 +198,34 @@ function App() {
   useEffect(() => {
     if (state !== 'result') return
     const recognizedTranscript = `${speech.transcript} ${speech.interimTranscript}`.trim()
-    if (!recognizedTranscript || autoEvaluateRequestedRef.current) return
+    if (autoEvaluateRequestedRef.current) return
+
+    if (recognizedTranscript) {
+      autoEvaluateRequestedRef.current = true
+      void runEvaluation(recognizedTranscript)
+      return
+    }
+
+    if (!recordedAudioBlob) return
+
     autoEvaluateRequestedRef.current = true
-    void runEvaluation(recognizedTranscript)
-  }, [runEvaluation, state, speech.transcript, speech.interimTranscript])
+    setIsEvaluating(true)
+    setEvaluateError('')
+    void (async () => {
+      try {
+        const text = await transcribeAudio(recordedAudioBlob, 'zh')
+        await runEvaluation(text)
+      } catch (error) {
+        setEvaluateError(
+          error instanceof Error
+            ? `${error.message}（你仍可手动补充原文继续分析）`
+            : '语音转写失败，请手动补充原文继续分析。',
+        )
+      } finally {
+        setIsEvaluating(false)
+      }
+    })()
+  }, [recordedAudioBlob, runEvaluation, state, speech.transcript, speech.interimTranscript])
 
   return (
     <main className="app-shell">
