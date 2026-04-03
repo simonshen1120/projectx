@@ -24,6 +24,16 @@ function formatDuration(totalSeconds: number) {
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
 }
 
+function choosePreferredMimeType() {
+  if (typeof window === 'undefined' || typeof MediaRecorder === 'undefined') return undefined
+  const candidates = [
+    'audio/ogg;codecs=opus',
+    'audio/webm;codecs=opus',
+    'audio/webm',
+  ]
+  return candidates.find((item) => MediaRecorder.isTypeSupported(item))
+}
+
 function App() {
   const [state, setState] = useState<AppState>('idle')
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
@@ -34,6 +44,7 @@ function App() {
   const [evaluation, setEvaluation] = useState<EvaluationResult | null>(null)
   const [isEvaluating, setIsEvaluating] = useState(false)
   const [evaluateError, setEvaluateError] = useState('')
+  const [resolvedTranscript, setResolvedTranscript] = useState('')
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const mediaStreamRef = useRef<MediaStream | null>(null)
@@ -93,7 +104,10 @@ function App() {
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      const mediaRecorder = new MediaRecorder(stream)
+      const preferredMimeType = choosePreferredMimeType()
+      const mediaRecorder = preferredMimeType
+        ? new MediaRecorder(stream, { mimeType: preferredMimeType })
+        : new MediaRecorder(stream)
 
       mediaRecorderRef.current = mediaRecorder
       mediaStreamRef.current = stream
@@ -105,7 +119,9 @@ function App() {
       }
       mediaRecorder.onstop = () => {
         if (audioChunksRef.current.length > 0) {
-          const blob = new Blob(audioChunksRef.current, { type: mediaRecorder.mimeType || 'audio/webm' })
+          const blob = new Blob(audioChunksRef.current, {
+            type: mediaRecorder.mimeType || preferredMimeType || 'audio/webm',
+          })
           setRecordedAudioBlob(blob)
         }
         audioChunksRef.current = []
@@ -119,6 +135,7 @@ function App() {
       setManualTranscript('')
       setEvaluation(null)
       setEvaluateError('')
+      setResolvedTranscript('')
       autoEvaluateRequestedRef.current = false
       setRecordedAudioBlob(null)
       speech.reset()
@@ -154,6 +171,7 @@ function App() {
     setEvaluation(null)
     setEvaluateError('')
     setIsEvaluating(false)
+    setResolvedTranscript('')
     setRecordedAudioBlob(null)
     autoEvaluateRequestedRef.current = false
     setErrorMessage('')
@@ -168,6 +186,7 @@ function App() {
     setEvaluateError('')
 
     try {
+      setResolvedTranscript(cleanTranscript)
       const result = await evaluateSelfIntro({
         transcript: cleanTranscript,
         duration_seconds: durationSeconds,
@@ -182,11 +201,16 @@ function App() {
     }
   }, [durationSeconds])
 
+  const liveTranscript = `${speech.transcript} ${speech.interimTranscript}`.trim()
+
   const transcriptForDisplay =
     evaluation?.transcript ||
-    `${speech.transcript} ${speech.interimTranscript}`.trim() ||
+    resolvedTranscript ||
+    liveTranscript ||
     manualTranscript ||
-    '未获取到转写内容，请重试并确认在 Chrome 中授权麦克风。'
+    (isEvaluating
+      ? '正在从录音中提取文本，请稍候...'
+      : '未获取到转写内容，你仍可手动补充原文继续分析。')
 
   useEffect(() => {
     return () => {
@@ -197,7 +221,7 @@ function App() {
 
   useEffect(() => {
     if (state !== 'result') return
-    const recognizedTranscript = `${speech.transcript} ${speech.interimTranscript}`.trim()
+    const recognizedTranscript = liveTranscript
     if (autoEvaluateRequestedRef.current) return
 
     if (recognizedTranscript) {
@@ -225,7 +249,13 @@ function App() {
         setIsEvaluating(false)
       }
     })()
-  }, [recordedAudioBlob, runEvaluation, state, speech.transcript, speech.interimTranscript])
+  }, [liveTranscript, recordedAudioBlob, runEvaluation, state, speech.transcript, speech.interimTranscript])
+
+  const showRealtimeFallbackHint =
+    !liveTranscript &&
+    (speech.error.includes('not-allowed') ||
+      speech.error.includes('network') ||
+      !speech.isSupported)
 
   return (
     <main className="app-shell">
@@ -265,9 +295,11 @@ function App() {
             <section className="transcript-box">
               <p className="transcript-title">实时转写（测试中）</p>
               <p className="transcript-content">
-                {speech.transcript || speech.interimTranscript
-                  ? `${speech.transcript} ${speech.interimTranscript}`.trim()
-                  : '正在聆听，请开始说话...'}
+                {liveTranscript
+                  ? liveTranscript
+                  : showRealtimeFallbackHint
+                    ? '当前环境实时转写不可用，结束录音后会自动走后端语音转写。'
+                    : '正在聆听，请开始说话...'}
               </p>
             </section>
             <RecordButton variant="danger" onClick={() => stopRecording()}>

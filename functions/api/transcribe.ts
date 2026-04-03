@@ -1,10 +1,15 @@
 import { transcribeAudioBase64 } from '../../server/transcribeCore'
 
 interface Env {
+  ASR_PROVIDER?: string
   ASR_API_KEY?: string
   OPENAI_API_KEY?: string
   ASR_BASE_URL?: string
   ASR_MODEL?: string
+  TENCENT_SECRET_ID?: string
+  TENCENT_SECRET_KEY?: string
+  TENCENT_ASR_REGION?: string
+  TENCENT_ENG_SERVICE_TYPE?: string
 }
 
 function jsonResponse(data: unknown, status = 200) {
@@ -43,19 +48,20 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       return jsonResponse({ error: 'audio_base64 is required' }, 400)
     }
 
-    const apiKey = context.env.ASR_API_KEY || context.env.OPENAI_API_KEY
-    if (!apiKey) {
-      return jsonResponse(
-        { error: 'ASR_API_KEY or OPENAI_API_KEY not configured in Cloudflare environment' },
-        503,
-      )
-    }
-
     const result = await transcribeAudioBase64(
       audioBase64,
       mimeType,
       language,
-      apiKey,
+      {
+        provider: context.env.ASR_PROVIDER,
+        apiKey: context.env.ASR_API_KEY || context.env.OPENAI_API_KEY,
+        baseUrl: context.env.ASR_BASE_URL,
+        model: context.env.ASR_MODEL,
+        tencentSecretId: context.env.TENCENT_SECRET_ID,
+        tencentSecretKey: context.env.TENCENT_SECRET_KEY,
+        tencentRegion: context.env.TENCENT_ASR_REGION,
+        tencentEngineType: context.env.TENCENT_ENG_SERVICE_TYPE,
+      },
     )
 
     if (!result.ok) {

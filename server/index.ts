@@ -10,14 +10,19 @@ const app = express()
 const port = Number(process.env.PORT ?? 8787)
 
 app.use(cors())
-app.use(express.json())
+app.use(express.json({ limit: '12mb' }))
 
 app.get('/api/health', (_req, res) => {
+  const asrProvider = (process.env.ASR_PROVIDER ?? 'openai').trim().toLowerCase()
   res.json({
     ok: true,
     service: 'mock-interview-coach-api',
     has_api_key: Boolean(process.env.DEEPSEEK_API_KEY),
-    has_asr_key: Boolean(process.env.ASR_API_KEY || process.env.OPENAI_API_KEY),
+    asr_provider: asrProvider,
+    has_asr_key:
+      asrProvider === 'tencent'
+        ? Boolean(process.env.TENCENT_SECRET_ID && process.env.TENCENT_SECRET_KEY)
+        : Boolean(process.env.ASR_API_KEY || process.env.OPENAI_API_KEY),
   })
 })
 
@@ -54,7 +59,16 @@ app.post('/api/transcribe', async (req, res) => {
     audioBase64,
     mimeType,
     language,
-    process.env.ASR_API_KEY ?? process.env.OPENAI_API_KEY,
+    {
+      provider: process.env.ASR_PROVIDER,
+      apiKey: process.env.ASR_API_KEY ?? process.env.OPENAI_API_KEY,
+      baseUrl: process.env.ASR_BASE_URL ?? process.env.OPENAI_BASE_URL,
+      model: process.env.ASR_MODEL,
+      tencentSecretId: process.env.TENCENT_SECRET_ID,
+      tencentSecretKey: process.env.TENCENT_SECRET_KEY,
+      tencentRegion: process.env.TENCENT_ASR_REGION,
+      tencentEngineType: process.env.TENCENT_ENG_SERVICE_TYPE,
+    },
   )
 
   if (!result.ok) {

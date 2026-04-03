@@ -1,6 +1,7 @@
 # AI 面试教练 MVP
 
 极简单页应用：录音 -> 语音转写（浏览器优先，后端 ASR 兜底）-> DeepSeek 评分建议。
+后端 ASR 支持 OpenAI 兼容接口与腾讯云 ASR（`ASR_PROVIDER=tencent`）。
 
 ## 本地运行
 
@@ -13,6 +14,13 @@ DEEPSEEK_API_KEY=sk-xxxxx
 # ASR_API_KEY=sk-xxxxx
 # ASR_BASE_URL=https://api.openai.com/v1
 # ASR_MODEL=whisper-1
+#
+# 腾讯云 ASR（可替代 OpenAI 兼容转写）
+# ASR_PROVIDER=tencent
+# TENCENT_SECRET_ID=AKIDxxxx
+# TENCENT_SECRET_KEY=xxxx
+# TENCENT_ASR_REGION=ap-beijing
+# TENCENT_ENG_SERVICE_TYPE=16k_zh
 ```
 
 2. 安装并启动：

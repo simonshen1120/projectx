@@ -89,7 +89,12 @@ export async function transcribeAudio(blob: Blob, language = 'zh') {
   try {
     data = JSON.parse(raw) as { text?: string; error?: string }
   } catch {
-    data = { error: raw || '转写服务返回了非 JSON 内容。' }
+    const normalized = raw.toLowerCase()
+    if (normalized.includes('payloadtoolargeerror') || normalized.includes('request entity too large')) {
+      data = { error: '录音文件过大，请缩短单次录音到 60 秒内后重试。' }
+    } else {
+      data = { error: '转写服务异常，请稍后重试（你仍可手动输入原文）。' }
+    }
   }
 
   if (!response.ok) {
