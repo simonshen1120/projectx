@@ -257,6 +257,13 @@ function App() {
       speech.error.includes('network') ||
       !speech.isSupported)
 
+  const showRealtimeErrorInHeader = state === 'recording' && Boolean(speech.error)
+  const showFallbackRecoveredHint =
+    state === 'result' &&
+    Boolean(speech.error) &&
+    !isEvaluating &&
+    Boolean(evaluation || resolvedTranscript)
+
   return (
     <main className="app-shell">
       <section className="panel">
@@ -273,7 +280,12 @@ function App() {
           </p>
         )}
         {errorMessage && <p className="hint error">{errorMessage}</p>}
-        {speech.error && <p className="hint error">{speech.error}</p>}
+        {showRealtimeErrorInHeader && <p className="hint error">{speech.error}</p>}
+        {showFallbackRecoveredHint && (
+          <p className="hint warn">
+            实时语音识别曾失败，但系统已自动切换后端转写并完成分析。
+          </p>
+        )}
 
         {state === 'idle' && (
           <RecordButton
@@ -341,15 +353,12 @@ function App() {
                   </ol>
                 </section>
               </div>
+            ) : isEvaluating ? (
+              <p className="hint">
+                正在转写并分析录音，结果出来后会自动更新，不是上一次结果。
+              </p>
             ) : (
-              <ul>
-                <li>综合评分：--</li>
-                <li>内容完整度：--</li>
-                <li>结构逻辑：--</li>
-                <li>表达流畅度：--</li>
-                <li>时间控制：--</li>
-                <li>说服力：--</li>
-              </ul>
+              <p className="hint warn">暂未生成分析结果，请重试或手动补充原文继续分析。</p>
             )}
             <section className="transcript-box">
               <p className="transcript-title">你的自我介绍原文</p>
